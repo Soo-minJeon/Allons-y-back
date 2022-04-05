@@ -570,8 +570,57 @@ var watchAloneEnd = function(req, res){
 
   var paramId = req.body.id || req.query.id; // 사용자 아이디 받아오기
   var parammovieTitle = req.body.movieTitle || req.query.movieTitle; // 감상중인 영화 제목 받아오기
+  var tmp_highlight_array // 정규화 전 배열
+  var normalization_array // 정규화 후 배열
+  var highlight_time // 감정의 폭이 큰 시간
 
+  async function getWatchResult(userId, movieTitle){ // 감상결과 기록을 찾는 함수. / 하이라이트 계산 배열 찾아옴.
 
+    var existing_watch = await database.WatchModel.find({
+      userId : userId, movieTitle : movieTitle
+    }).clone()
+
+    if (existing_watch.length>0){
+      console.log('해당 유저의 해당 영화의 감상 기록 찾음.')
+      tmp_highlight_array = existing_watch[0].highlight_array
+    }
+    else {
+      console.log('해당 유저의 해당 영화의 감상 기록 존재하지 않음.')
+      res.status(400).send();
+    }
+  }
+  async function getHighlightTile(){
+    tmp_highlight_array.sort(function(a,b){
+      if (a.emotion_diff > b.emotion_diff) return -1;
+      if (a.emotion_diff < b.emotion_diff) return 1;
+      if (a.emotion_diff == b.emotion_diff) return 0;
+    });
+    highlight_time = tmp_highlight_array[0].time
+  }
+
+  async function main(){
+
+    ////////////////////////// 하이라이트 정규화 //////////////////////////
+    await getWatchResult(paramId, parammovieTitle);
+    await normalization(tmp_highlight_array, function(result){
+      normalization_array = result
+    });
+    /////////////////////////////////////////////////////////////////
+
+    await database.WatchModel.updateOne({ // 감상목록 highlight_array 수정 // 
+      userId: paramId,
+      movieTitle: parammovieTitle
+    }, {  
+      $set: {
+        highlight_time : highlight_time,
+        highlight_array : normalization_array,   
+      },
+    })
+  }
+  main()
+  
+  
+  
 };
 
 var email = function(req, res){
